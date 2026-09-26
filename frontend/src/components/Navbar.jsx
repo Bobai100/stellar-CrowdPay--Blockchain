@@ -15,6 +15,7 @@ export default function Navbar() {
   const [notifications, setNotifications] = useState([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const bellRef = useRef(null);
+  const bellBtnRef = useRef(null);
 
   const unread = notifications.filter((n) => !n.read_at).length;
 
@@ -37,24 +38,32 @@ export default function Navbar() {
         setShowDropdown(false);
       }
     }
+    function handleKey(e) {
+      if (e.key === 'Escape') {
+        setShowDropdown(false);
+        bellBtnRef.current?.focus();
+      }
+    }
     document.addEventListener('mousedown', handleOutside);
-    return () => document.removeEventListener('mousedown', handleOutside);
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('mousedown', handleOutside);
+      document.removeEventListener('keydown', handleKey);
+    };
   }, [showDropdown]);
+
+  function handleMarkRead(id) {
+    setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, read_at: new Date().toISOString() } : n));
+  }
+
+  async function handleMarkAllRead() {
+    await api.markAllNotificationsRead().catch(() => {});
+    setNotifications((prev) => prev.map((n) => ({ ...n, read_at: n.read_at || new Date().toISOString() })));
+  }
 
   function handleLogout() {
     logout();
     navigate('/');
-  }
-
-  function handleMarkRead(id) {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, read_at: n.read_at || new Date().toISOString() } : n))
-    );
-  }
-
-  async function handleMarkAllRead() {
-    setNotifications((prev) => prev.map((n) => ({ ...n, read_at: n.read_at || new Date().toISOString() })));
-    await api.markAllNotificationsRead().catch(() => {});
   }
 
   return (
@@ -90,9 +99,13 @@ export default function Navbar() {
               <span style={styles.name} aria-hidden="true">{user.name}</span>
               <div style={styles.bellWrap} ref={bellRef}>
                 <button
+                  ref={bellBtnRef}
                   onClick={() => setShowDropdown((v) => !v)}
+                  aria-haspopup="menu"
+                  aria-expanded={showDropdown}
+                  aria-controls="notification-menu"
                   style={styles.bellBtn}
-                  aria-label={t('nav.notificationsAria', { count: unread })}
+                  aria-label={`${unread} unread notifications`}
                 >
                   🔔
                   {unread > 0 && <span style={styles.badge}>{unread}</span>}
@@ -140,26 +153,5 @@ const styles = {
     padding: '0.35rem 0.55rem',
     color: 'var(--color-text-secondary)',
     fontSize: '0.85rem',
-  },
-  bellWrap: { position: 'relative' },
-  bellBtn: {
-    position: 'relative',
-    background: 'transparent',
-    border: 'none',
-    fontSize: '1.15rem',
-    lineHeight: 1,
-    cursor: 'pointer',
-    padding: '0.35rem',
-  },
-  badge: {
-    position: 'absolute',
-    top: '-2px',
-    right: '-4px',
-    background: 'var(--color-accent)',
-    color: '#fff',
-    borderRadius: '999px',
-    fontSize: '0.65rem',
-    fontWeight: 700,
-    padding: '1px 5px',
   },
 };

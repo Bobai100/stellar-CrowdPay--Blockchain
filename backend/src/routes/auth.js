@@ -19,6 +19,7 @@ const {
   validateRequest,
   validateRequestAsError,
 } = require('../middleware/validation');
+const asyncHandler = require('../utils/asyncHandler');
 
 /**
  * @openapi
@@ -195,7 +196,7 @@ async function rotateRefreshToken(oldToken, userId, familyId = null) {
   return createRefreshToken(userId, familyId);
 }
 
-router.post('/register', registerLimiter, registerValidation, validateRequest, async (req, res) => {
+router.post('/register', registerLimiter, registerValidation, validateRequest, asyncHandler(async (req, res) => {
   /**
    * @openapi
    * /api/auth/register:
@@ -287,7 +288,11 @@ router.post('/register', registerLimiter, registerValidation, validateRequest, a
 
   if (walletType === 'freighter') {
     publicKey = req.body.wallet_public_key;
-    // wallet_public_key validated by middleware when wallet_type=freighter
+    try {
+      Keypair.fromPublicKey(publicKey);
+    } catch (_err) {
+      return res.status(400).json({ error: 'A valid wallet_public_key is required for Freighter registration' });
+    }
     encryptedSecret = null;
   } else {
     const keypair = Keypair.random();
@@ -344,9 +349,9 @@ router.post('/register', registerLimiter, registerValidation, validateRequest, a
   });
 
   res.status(201).json({ token: accessToken, user });
-});
+}));
 
-router.post('/login', loginLimiter, loginValidation, validateRequest, async (req, res) => {
+router.post('/login', loginLimiter, loginValidation, validateRequest, asyncHandler(async (req, res) => {
   /**
    * @openapi
    * /api/auth/login:
@@ -439,9 +444,9 @@ router.post('/login', loginLimiter, loginValidation, validateRequest, async (req
       kyc_required_for_campaigns: isKycRequiredForCampaigns(),
     },
   });
-});
+}));
 
-router.post('/refresh', async (req, res) => {
+router.post('/refresh', asyncHandler(async (req, res) => {
   const token = req.cookies?.[REFRESH_TOKEN_COOKIE_NAME];
   if (!token) {
     return res.status(401).json({ error: 'No refresh token provided' });
@@ -477,9 +482,9 @@ router.post('/refresh', async (req, res) => {
       kyc_required_for_campaigns: isKycRequiredForCampaigns(),
     },
   });
-});
+}));
 
-router.post('/logout', async (req, res) => {
+router.post('/logout', asyncHandler(async (req, res) => {
   const token = req.cookies?.[REFRESH_TOKEN_COOKIE_NAME];
   if (token) {
     await revokeRefreshToken(token);
@@ -487,7 +492,7 @@ router.post('/logout', async (req, res) => {
   clearRefreshTokenCookie(res);
   clearAccessTokenCookie(res);
   res.json({ ok: true });
-});
+}));
 
 // Email verification TTL: 24 hours
 const EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
@@ -633,7 +638,7 @@ router.post(
   loginLimiter,
   forgotPasswordValidation,
   validateRequestAsError,
-  async (req, res) => {
+  asyncHandler(async (req, res) => {
     const normalizedEmail = req.body.email.trim().toLowerCase();
 
     const { rows } = await db.query(
@@ -668,15 +673,14 @@ router.post(
     }
 
     res.json({ message: FORGOT_PASSWORD_MESSAGE });
-  }
-);
+  }));
 
 router.post(
   '/reset-password',
   loginLimiter,
   resetPasswordValidation,
   validateRequestAsError,
-  async (req, res) => {
+  asyncHandler(async (req, res) => {
     const { token, password } = req.body;
     const tokenHash = hashToken(token);
 
